@@ -1,101 +1,142 @@
-Reaction Timer Game (AVR + OLED + RGB LED)
+# Reaction Timer Game (AVR + OLED + RGB LED)
+
+
 This is an interactive reaction-based game developed for the ATmega328P microcontroller using C. The game features a colorful UI on an SSD1306 OLED display, RGB LED feedback, difficulty selection, reaction timing, and EEPROM-stored high scores.
 
-🕹️ Game Overview
-The game challenges players to react to a green light as quickly as possible. Players go through 5 rounds, with each round randomly starting after a delay. Pressing the button too early (while the light is red) ends the game immediately.
 
-🎮 Game Flow:
-Welcome Screen – Rainbow LED animation; press button to start.
+## 🕹️ Game Overview
 
-Difficulty Selection – Press to cycle through Easy, Medium, and Hard; hold button to confirm.
 
-Countdown Phase – Wait for the red light to turn green.
+The game challenges players to react to a green light as quickly as possible. Players go through **5 rounds**, with each round randomly starting after a delay. Pressing the button **too early** (while the light is red) ends the game immediately.
 
-Reaction Phase – Press the button as fast as possible once the LED turns green.
 
-Results Phase – Shows your reaction time and a comment.
+### 🎮 Game Flow
 
-Final Score – Average time shown after 5 rounds + placeholder for top 3 scores.
 
-📦 Features
-Interrupt-driven button input
+1. **Welcome Screen** – Rainbow LED animation; press button to start.
 
-Difficulty selector (Easy: 5s, Medium: 2.5s, Hard: 1s reaction window)
+2. **Difficulty Selection** – Press to cycle through Easy, Medium, and Hard; hold button to confirm.
 
-OLED screen feedback (round status, reaction time, progress bars)
+3. **Countdown Phase** – Wait for the red light to turn green.
 
-RGB LED feedback for visual indication (Red = wait, Green = go, Blue = results)
+4. **Reaction Phase** – Press the button as fast as possible once the LED turns green.
 
-Buzzer alert if button is pressed too early
+5. **Results Phase** – Shows your reaction time and a comment.
 
-Top 3 scores (EEPROM placeholder shown; implementation pending)
+6. **Final Score** – Average time shown after 5 rounds + placeholder for top 3 scores.
 
-Hold to Restart functionality after game ends
 
-🔧 Hardware Requirements
-ATmega328P microcontroller (e.g., Arduino Uno)
+## 📦 Features
 
-SSD1306 OLED display (I2C)
 
-RGB LED connected to PWM pins
+- **Interrupt-driven button input**
 
-Push button connected to PD2 (INT0)
+- **Difficulty selector** (Easy: 5s, Medium: 2.5s, Hard: 1s reaction window)
 
-Buzzer connected to PB0
+- **OLED screen feedback** (round status, reaction time, progress bars)
 
-🗂️ File Structure
-main.c – Contains the full game logic and state machine
+- **RGB LED feedback** for visual indication (Red = wait, Green = go, Blue = results)
 
-i2c.h / SSD1306.h – OLED display driver code
+- **Buzzer alert** if button is pressed too early
 
-Note: EEPROM storage for top scores is referenced but not yet implemented in the given code
+- **Top 3 scores** (EEPROM placeholder shown; implementation pending)
 
-🔩 Pin Configuration
+- **Hold to Restart** functionality after game ends
 
-Component	Pin	Notes
-Button	PD2 (INT0)	Active LOW with pull-up
-Buzzer	PB0	Activated during penalty
-RGB LED	PB1, PB2, PB3	PWM-controlled (OC1A, OC1B, OC2A)
-OLED Display	I2C (SCL/SDA)	SSD1306 display
-🧠 Concepts Used
-Finite State Machine for game logic
 
-External Interrupts (INT0) for responsive button handling
+## 🔧 Hardware Requirements
 
-Software PWM for RGB LED
 
-Debouncing using interrupt logic
+- ATmega328P microcontroller (e.g., Arduino Uno)
 
-Non-blocking delays using _delay_ms() to maintain responsiveness
+- SSD1306 OLED display (I2C)
 
-📸 Screens (OLED Text Output)
-"Welcome! Press Button to Start"
+- RGB LED connected to PWM pins
 
-"Choose Difficulty: > EASY <"
+- Push button connected to `PD2` (INT0)
 
-"Round X of 5. Wait for GREEN light"
+- Buzzer connected to `PB0`
 
-"GREEN! Press button!"
 
-"Too slow!" or "YOU LOSE!"
+## 🗂️ File Structure
 
-"Average Time: XXX ms"
 
-🚀 Getting Started
-Clone the repository
+- `main.c` – Contains the full game logic and state machine
 
-Build using avr-gcc or upload via Arduino IDE with correct pin mappings
+- `i2c.h / SSD1306.h` – OLED display driver code
 
-Connect OLED, button, buzzer, and RGB LED as per pin config
+- **Note**: EEPROM storage for top scores is referenced but not yet implemented in the given code
 
-Power your board and start the game!
 
-📝 TODO
-Implement EEPROM read/write for saving top 3 reaction times
+## 🔩 Pin Configuration
 
-Add support for displaying those top times per difficulty
 
-Improve RNG seed (currently fixed to srand(42))
+| Component     | Pin        | Notes                          |
 
-👨‍💻 Author
-Braden Miller – @bradenmiller
+|---------------|------------|--------------------------------|
+
+| Button        | PD2 (INT0) | Active LOW with pull-up        |
+
+| Buzzer        | PB0        | Activated during penalty        |
+
+| RGB LED       | PB1, PB2, PB3 | PWM-controlled (OC1A, OC1B, OC2A) |
+
+| OLED Display  | I2C (SCL/SDA) | SSD1306 display                |
+
+
+## 🧠 Concepts Used
+
+
+- Finite State Machine for game logic
+
+- External Interrupts (`INT0`) for responsive button handling
+
+- Software PWM for RGB LED
+
+- Debouncing using interrupt logic
+
+- Non-blocking delays using `_delay_ms()` to maintain responsiveness
+
+
+## 📸 Screens (OLED Text Output)
+
+
+- "Welcome! Press Button to Start"
+
+- "Choose Difficulty: > EASY <"
+
+- "Round X of 5. Wait for GREEN light"
+
+- "GREEN! Press button!"
+
+- "Too slow!" or "YOU LOSE!"
+
+- "Average Time: XXX ms"
+
+
+## 🚀 Getting Started
+
+
+1. Clone the repository
+
+2. Build using `avr-gcc` or upload via Arduino IDE with correct pin mappings
+
+3. Connect OLED, button, buzzer, and RGB LED as per pin config
+
+4. Power your board and start the game!
+
+
+## 📝 TODO
+
+
+- Implement EEPROM read/write for saving top 3 reaction times
+
+- Add support for displaying those top times per difficulty
+
+- Improve RNG seed (currently fixed to `srand(42)`)
+
+
+## 👨‍💻 Author
+
+
+Braden Miller – [@bradenmiller22](https://github.com/bradenmiller22)
