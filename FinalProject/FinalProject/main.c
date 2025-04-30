@@ -1,6 +1,7 @@
 #define F_CPU 16000000UL
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include <avr/eeprom.h>  // Add EEPROM library
 #include <util/delay.h>
 #include <stdlib.h>
 #include "i2c.h"
@@ -26,11 +27,19 @@
 
 // Game settings
 #define MAX_ROUNDS 5             // Number of rounds before game over
+#define TOP_SCORES_COUNT 3       // Number of top scores to save
+
+// EEPROM address definitions
+#define EEPROM_INIT_MARKER 0xAA  // Marker to check if EEPROM has been initialized
+#define EEPROM_INIT_ADDR   0     // Address to store initialization marker
+#define EEPROM_EASY_ADDR   2     // Starting address for easy difficulty high scores
+#define EEPROM_MEDIUM_ADDR 14    // Starting address for medium difficulty high scores
+#define EEPROM_HARD_ADDR   26    // Starting address for hard difficulty high scores
 
 // Global variables
 volatile uint8_t button_state = 0;        // Current button state
 volatile uint8_t button_pressed = 0;      // Button press event flag
-volatile uint8_t button_released = 0;     // Button release event flag - NEW VARIABLE
+volatile uint8_t button_released = 0;     // Button release event flag
 volatile uint8_t game_state = STATE_WAITING_TO_START;
 uint16_t reaction_time = 0;               // Reaction time in milliseconds
 uint16_t total_reaction_time = 0;         // Sum of all reaction times
@@ -38,6 +47,7 @@ uint16_t reaction_times[MAX_ROUNDS];      // Store each round's reaction time
 uint8_t current_round = 0;                // Current game round
 uint8_t difficulty_level = DIFFICULTY_MEDIUM; // Default difficulty
 uint16_t green_light_timeout = 2500;      // Default timeout (will be set based on difficulty)
+uint16_t top_scores[3][TOP_SCORES_COUNT]; // Store top scores for each difficulty
 
 // Interrupt service routine for button press/release
 ISR(INT0_vect) {
@@ -56,7 +66,7 @@ ISR(INT0_vect) {
 		}
 	}
 	
-	// Detect falling edge (button release) - NEW CODE
+	// Detect falling edge (button release)
 	if (!new_button_state && button_state) {
 		button_released = 1;
 	}
@@ -68,6 +78,77 @@ ISR(INT0_vect) {
 		PORTB |= (1 << BUZZER_PIN);  // Buzzer ON
 		} else {
 		PORTB &= ~(1 << BUZZER_PIN); // Buzzer OFF
+	}
+}
+
+// EEPROM Functions
+void init_eeprom() {
+	// Check if EEPROM has been initialized already
+	uint8_t init_marker = eeprom_read_byte((uint8_t*)EEPROM_INIT_ADDR);
+	
+	if (init_marker != EEPROM_INIT_MARKER) {
+		// EEPROM not initialized, initialize with default values (9999 ms)
+		for (uint8_t diff = 0; diff < 3; diff++) {
+			uint16_t* addr = (uint16_t*)(diff == DIFFICULTY_EASY ? EEPROM_EASY_ADDR :
+			diff == DIFFICULTY_MEDIUM ? EEPROM_MEDIUM_ADDR :
+			EEPROM_HARD_ADDR);
+			
+			// Initialize top scores to 9999 (worst possible time)
+			for (uint8_t i = 0; i < TOP_SCORES_COUNT; i++) {
+				eeprom_write_word(addr + i, 9999);
+			}
+		}
+		
+		// Mark EEPROM as initialized
+		eeprom_write_byte((uint8_t*)EEPROM_INIT_ADDR, EEPROM_INIT_MARKER);
+	}
+}
+
+// Read top scores from EEPROM based on difficulty
+void read_top_scores(uint8_t difficulty) {
+	uint16_t* addr = (uint16_t*)(difficulty == DIFFICULTY_EASY ? EEPROM_EASY_ADDR :
+	difficulty == DIFFICULTY_MEDIUM ? EEPROM_MEDIUM_ADDR :
+	EEPROM_HARD_ADDR);
+	
+	// Read top scores
+	for (uint8_t i = 0; i < TOP_SCORES_COUNT; i++) {
+		top_scores[difficulty][i] = eeprom_read_word(addr + i);
+	}
+}
+
+// Save a new score and reorganize top scores if needed
+void update_top_scores(uint8_t difficulty, uint16_t new_score) {
+	// First read current scores
+	read_top_scores(difficulty);
+	
+	// Check if new score is better than any existing scores
+	uint8_t insert_pos = TOP_SCORES_COUNT; // Default to not inserting
+	
+	for (uint8_t i = 0; i < TOP_SCORES_COUNT; i++) {
+		if (new_score < top_scores[difficulty][i]) {
+			insert_pos = i;
+			break;
+		}
+	}
+	
+	// If new score is a top score
+	if (insert_pos < TOP_SCORES_COUNT) {
+		// Shift scores down
+		for (uint8_t i = TOP_SCORES_COUNT - 1; i > insert_pos; i--) {
+			top_scores[difficulty][i] = top_scores[difficulty][i - 1];
+		}
+		
+		// Insert new score
+		top_scores[difficulty][insert_pos] = new_score;
+		
+		// Save updated scores to EEPROM
+		uint16_t* addr = (uint16_t*)(difficulty == DIFFICULTY_EASY ? EEPROM_EASY_ADDR :
+		difficulty == DIFFICULTY_MEDIUM ? EEPROM_MEDIUM_ADDR :
+		EEPROM_HARD_ADDR);
+		
+		for (uint8_t i = 0; i < TOP_SCORES_COUNT; i++) {
+			eeprom_write_word(addr + i, top_scores[difficulty][i]);
+		}
 	}
 }
 
@@ -215,6 +296,9 @@ int main(void) {
 	// Setup pins
 	DDRB |= (1 << BUZZER_PIN);   // PB0 output for buzzer
 	setup_button_interrupt();    // Configure button interrupt
+	
+	// Initialize EEPROM if needed
+	init_eeprom();
 	
 	// Seed random number generator
 	srand(42);  // Fixed seed for now
@@ -536,32 +620,29 @@ int main(void) {
 			
 			OLED_SetCursor(1, 1);
 			OLED_Printf("Average Time: %d ms", average);
-
-			//show top times from eeprom for that diffuculty
+			
+			// Check if this average is a new high score
+			update_top_scores(difficulty_level, average);
+			
+			// Read top scores for current difficulty
+			read_top_scores(difficulty_level);
+			
+			// Show top times from EEPROM for current difficulty
 			OLED_SetCursor(2, 2);
-			switch (difficulty_level) {
-				case DIFFICULTY_EASY:
-				OLED_Printf("Top Times on EASY:");
-				break;
-				case DIFFICULTY_MEDIUM:
-				OLED_Printf("Top Times on MEDIUM:");
-				break;
-				case DIFFICULTY_HARD:
-				OLED_Printf("Top Times on HARD:");
-				break;
-			}
-
+			OLED_Printf("Top Times:");
+			
 			OLED_SetCursor(3, 3);
-			OLED_Printf("1. "); //top time
-
+			OLED_Printf("1. %d ms", top_scores[difficulty_level][0]);
+			
 			OLED_SetCursor(4, 4);
-			OLED_Printf("2. "); //2nd time
-
+			OLED_Printf("2. %d ms", top_scores[difficulty_level][1]);
+			
 			OLED_SetCursor(5, 5);
-			OLED_Printf("3. "); //3rd time
+			OLED_Printf("3. %d ms", top_scores[difficulty_level][2]);
+		
 			
 			OLED_SetCursor(6, 6);
-			OLED_Printf("HOLD 3s to restart: ");
+			OLED_Printf("HOLD 3s to restart");
 			
 			// Wait for button press
 			button_pressed = 0;
