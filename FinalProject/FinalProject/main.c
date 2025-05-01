@@ -28,6 +28,7 @@
 // Game settings
 #define MAX_ROUNDS 5             // Number of rounds before game over
 #define TOP_SCORES_COUNT 3       // Number of top scores to save
+#define TIMING_COMPENSATION 90   // Compensation for timing inaccuracy (in ms)
 
 // EEPROM address definitions
 #define EEPROM_INIT_MARKER 0xAA  // Marker to check if EEPROM has been initialized
@@ -48,6 +49,9 @@ uint8_t current_round = 0;                // Current game round
 uint8_t difficulty_level = DIFFICULTY_MEDIUM; // Default difficulty
 uint16_t green_light_timeout = 2500;      // Default timeout (will be set based on difficulty)
 uint16_t top_scores[3][TOP_SCORES_COUNT]; // Store top scores for each difficulty
+
+// NEW: Flag to control buzzer in timeout situation
+volatile uint8_t timeout_buzzer_active = 0;
 
 // Interrupt service routine for button press/release
 ISR(INT0_vect) {
@@ -169,12 +173,13 @@ void set_rgb(uint8_t r, uint8_t g, uint8_t b) {
 	OCR2A = b;
 }
 
+// MODIFIED: Added timeout_buzzer_active flag check
 void non_blocking_delay(uint16_t ms) {
 	for (uint16_t i = 0; i < ms; i++) {
 		_delay_ms(1);
 		
-		// Update buzzer for red light penalties
-		if (button_state && game_state == STATE_COUNTDOWN) {
+		// Update buzzer for red light penalties or timeout buzzer
+		if ((button_state && game_state == STATE_COUNTDOWN) || timeout_buzzer_active) {
 			PORTB |= (1 << BUZZER_PIN);  // Buzzer ON
 			} else {
 			PORTB &= ~(1 << BUZZER_PIN); // Buzzer OFF
@@ -274,17 +279,22 @@ void set_difficulty(uint8_t level) {
 	
 	switch (level) {
 		case DIFFICULTY_EASY:
-		green_light_timeout = 5000;  // 5 seconds for easy
+		green_light_timeout = 3000;  // 3 seconds for easy
 		break;
 		case DIFFICULTY_MEDIUM:
-		green_light_timeout = 2500;  // 2.5 seconds for medium
+		green_light_timeout = 1500;  // 1.5 seconds for medium
 		break;
 		case DIFFICULTY_HARD:
-		green_light_timeout = 1000;  // 1 second for hard
+		green_light_timeout = 500;   // 0.5 seconds for hard
 		break;
 		default:
-		green_light_timeout = 2500;  // Default to medium
+		green_light_timeout = 1500;  // Default to medium
 	}
+}
+
+// Apply timing compensation to reaction time
+uint16_t compensate_timing(uint16_t raw_time) {
+	return raw_time + TIMING_COMPENSATION;
 }
 
 int main(void) {
@@ -419,17 +429,17 @@ int main(void) {
 				case DIFFICULTY_EASY:
 				OLED_Printf("EASY MODE");
 				OLED_SetCursor(1, 1);
-				OLED_Printf("5 sec to respond");
+				OLED_Printf("3 sec to respond");
 				break;
 				case DIFFICULTY_MEDIUM:
 				OLED_Printf("MEDIUM MODE");
 				OLED_SetCursor(1, 1);
-				OLED_Printf("2.5 sec to respond");
+				OLED_Printf("1.5 sec to respond");
 				break;
 				case DIFFICULTY_HARD:
 				OLED_Printf("HARD MODE");
 				OLED_SetCursor(1, 1);
-				OLED_Printf("1 sec to respond");
+				OLED_Printf("0.5 sec to respond");
 				break;
 			}
 			
@@ -527,9 +537,16 @@ int main(void) {
 			
 			// Process results
 			if (button_pressed) {
-				// Store reaction time
-				reaction_times[current_round-1] = reaction_time;
-				total_reaction_time += reaction_time;
+				// Apply timing compensation to reaction time
+				uint16_t compensated_time = compensate_timing(reaction_time);
+				
+				// Store reaction time (with compensation)
+				reaction_times[current_round-1] = compensated_time;
+				total_reaction_time += compensated_time;
+				
+				// Update reaction_time for display
+				reaction_time = compensated_time;
+				
 				game_state = STATE_RESULT;
 				} else {
 				// Timeout - too slow
@@ -542,7 +559,18 @@ int main(void) {
 				// Set LED to red to indicate failure
 				setRed();
 				
-				non_blocking_delay(2000);
+				// MODIFIED: Set timeout buzzer flag ON before delay
+				timeout_buzzer_active = 1;
+				
+				// Sound buzzer for timeout
+				PORTB |= (1 << BUZZER_PIN);  // Buzzer ON (redundant but safe)
+				non_blocking_delay(500);    // Sound buzzer for .5 second
+				
+				// MODIFIED: Turn off timeout buzzer flag after use
+				timeout_buzzer_active = 0;
+				PORTB &= ~(1 << BUZZER_PIN); // Buzzer OFF (redundant but safe)
+				
+				non_blocking_delay(1500);    // Additional delay to complete the 2-second pause
 				
 				// Go back to start screen
 				button_pressed = 0;
@@ -639,7 +667,7 @@ int main(void) {
 			
 			OLED_SetCursor(5, 5);
 			OLED_Printf("3. %d ms", top_scores[difficulty_level][2]);
-		
+			
 			
 			OLED_SetCursor(6, 6);
 			OLED_Printf("HOLD 3s to restart");
